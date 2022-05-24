@@ -6,13 +6,16 @@ from structures.Singleton import Singleton
 from structures.CircularBuffer import CircularBuffer
 
 
-BUFFER_SIZE = 512
+# default
+_buffer_size = 4096
 
 
 class EngiEvent:
     """needs to be compatible with pygame events"""
     def __init__(self, evtype, **kwargs):
         self.type = evtype
+        for k, v in kwargs.items():
+            self.__setattr__(k, v)
 
 
 class Emitter:
@@ -33,12 +36,13 @@ class Emitter:
             cls._free_id += 1
         # register id
         cls._taken_ids.add(self._ident)
+        
         # cache the manager
-        self._evt_m = EventManager.instance()
+        self._event_m = EventManager.instance()
 
     @classmethod
     def reset_class_state(cls):
-        cls._taken.clear()
+        cls._taken_ids.clear()
         cls._free_id = -3498778*10**7
 
     @property
@@ -46,7 +50,7 @@ class Emitter:
         return self._ident
 
     def pev(self, ev_type, **kwargs):
-        self._evt_m.post(EngiEvent(ev_type, **kwargs))
+        self._event_m.post(EngiEvent(ev_type, **kwargs))
 
 
 class Listener(Emitter, ABC):
@@ -54,17 +58,17 @@ class Listener(Emitter, ABC):
         """
         if sticky==True, the receiver won't be removed when "EventManager.soft_reset()"s
         """
-        super().__init__(specific_id)
+        Emitter.__init__(self, specific_id)
         self.sticky = sticky
 
     def turn_on(self):
-        self._evt_m.add_listener(self)
+        self._event_m.add_listener(self)
 
     def turn_off(self):
-        self._evt_m.remove_listener(self)
+        self._event_m.remove_listener(self)
 
     @abstractmethod
-    def proc_event(self, ev, source):
+    def proc_event(self, ev):
         raise NotImplementedError
 
 
@@ -91,7 +95,7 @@ class ListenerSet:
         ids_to_keep = set()
         past_order = list()
         for listener_id in self._listener_ids:
-            if self._corresp[l_id].sticky:
+            if self._corresp[listener_id].sticky:
                 ids_to_keep.add(listener_id)
                 past_order.append(listener_id)
         self.hard_reset()
@@ -111,7 +115,7 @@ class ListenerSet:
 @Singleton
 class EventManager:
     def __init__(self):
-        self._buffer = CircularBuffer(BUFFER_SIZE)
+        self._buffer = CircularBuffer(_buffer_size)
 
         nothing_ev = list()
         
@@ -126,14 +130,18 @@ class EventManager:
         self.hard_reset = self._lp.hard_reset
         self.soft_reset = self._lp.soft_reset
 
+    def set_buffer_size(self, n):
+        global _buffer_size
+        _buffer_size = n
+        self._buffer = CircularBuffer(n)
+
     @property
     def count(self):
         return self._lp.get_size()
 
-    def post(self, evobj, ref_emitter=None):
-        evobj.vdltrsstldv = ref_emitter  # randomly named field, to pack the extra info
+    def post(self, evobj):
         self._buffer.enqueue(evobj)
-    
+
     def update(self):
         for ae in self.alien_ev_source_provider():
             self.buffer.enqueue(ae)
@@ -143,7 +151,7 @@ class EventManager:
             evobj = self._buffer.dequeue()
             
             for listener_id in self._lp:
-                captures_evt = self._lp[listener_id].proc_event(evobj, evobj.vdltrsstldv)
+                captures_evt = self._lp[listener_id].proc_event(evobj)
                 
                 if captures_evt:
                     continue
@@ -160,7 +168,7 @@ if __name__ == '__main__':
 
     print('-----')
     class _TotoL(Listener):
-        def proc_event(self, ev, source):
+        def proc_event(self, ev):#, source):
             if ev.type == 33:
                 print('hmm')
     

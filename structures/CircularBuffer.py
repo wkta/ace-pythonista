@@ -2,7 +2,7 @@
 
 class CircularBuffer(object):
 
-    def __init__(self, max_size=10):
+    def __init__(self, max_size=128):
         """Initialize the CircularBuffer with a max_size if set, otherwise
         max_size will elementsdefault to 10"""
         self.buffer = [None] * max_size
@@ -18,9 +18,11 @@ class CircularBuffer(object):
     def size(self):
         """Return the size of the CircularBuffer
         Runtime: O(1) Space: O(1)"""
-        if self.tail >= self.head:
-            return self.tail - self.head
-        return self.max_size - self.head - self.tail
+        y = -self.head
+        if self.tail < self.head:
+            return y + self.max_size - self.tail
+        else:
+            return y + self.tail
 
     def is_empty(self):
         """Return True if the head of the CircularBuffer is equal to the tail,
@@ -38,10 +40,13 @@ class CircularBuffer(object):
         """Insert an item at the back of the CircularBuffer
         Runtime: O(1) Space: O(1)"""
         if self.is_full():
-            raise OverflowError(
-                "CircularBuffer is full, unable to enqueue item")
-        self.buffer[self.tail] = item
-        self.tail = (self.tail + 1) % self.max_size
+            raise OverflowError("CircularBuffer is full, unable to enqueue item")
+        if self.tail > self.max_size and self.head > self.max_size:
+            self.tail -= self.max_size
+            self.head -= self.max_size
+
+        self.buffer[self.tail % self.max_size] = item
+        self.tail = self.tail + 1
 
     def front(self):
         """Return the item at the front of the CircularBuffer
@@ -51,11 +56,11 @@ class CircularBuffer(object):
     def dequeue(self):
         """Return the item at the front of the Circular Buffer and remove it
         Runtime: O(1) Space: O(1)"""
-        if self.is_empty():
+        if self.tail == self.head:  # is empty
             raise IndexError("CircularBuffer is empty, unable to dequeue")
-        item = self.buffer[self.head]
-        self.buffer[self.head] = None
-        self.head = (self.head + 1) % self.max_size
+        item = self.buffer[self.head % self.max_size]
+        self.buffer[self.head % self.max_size] = None
+        self.head = self.head + 1
         return item
 
 
