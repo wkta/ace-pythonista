@@ -1,3 +1,19 @@
+"""
+useful for creating modules that can be easily hacked/extended,
+via the dependency injection pattern.
+
+e.g. imagine targ_pm the target,
+ an example of PowerModule that uses a "particles" sub-module.
+ 
+Therefore thanks to the current file,
+I'll be able to do this:
+
+targ_pm.injector.register('particles', '..othermodpath.betterpartices')
+
+that is replace the standard submodule by smth else, maybe better.
+It's the same method for adding things that even don't exist.
+
+"""
 import importlib
 
 

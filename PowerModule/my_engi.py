@@ -1,4 +1,4 @@
-from abstract.PowerModule import PowerModule as _Pm
+from PowerModule import PowerModule as _Pm
 import os as _os
 
 
