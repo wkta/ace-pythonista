@@ -122,7 +122,8 @@ class EventManager:
         def _no_extr_ev():
             nonlocal nothing_ev
             return nothing_ev
-        self.alien_ev_source_provider = _no_extr_ev  # its like a callback, and can be hacked 
+        # its like a callback, and can be hacked
+        self.alien_ev_provider = _no_extr_ev
         
         self._lp = ListenerSet()
         self.add_listener = self._lp.add_listener
@@ -143,8 +144,8 @@ class EventManager:
         self._buffer.enqueue(evobj)
 
     def update(self):
-        for ae in self.alien_ev_source_provider():
-            self.buffer.enqueue(ae)
+        for ae in self.alien_ev_provider():
+            self._buffer.enqueue(ae)
         
         n = self._buffer.size()
         for _ in range(n):

@@ -2,14 +2,11 @@ import time
 from abc import abstractmethod
 from collections import deque as deque_obj
 
-# from ... import _hub as injec
+
+# -- TODO merge whats useful
+#   into event.py
 
 
-# from ...foundation import defs
-
-
-# enum_builder_generic = injec.struct.enum_builder_generic
-# pygame = injec.pygame
 gl_unique_manager = None
 
 
@@ -21,8 +18,8 @@ def create_manager():
         print('* warning: second call to event.create_manager()')
 
 
-# def _enum_engine_ev_types(*sequential, **named):
-#     return enum_builder_generic(True, defs.FIRST_ENGIN_TYPE, *sequential, **named)
+# -- TODO put engine defs elsewhere,
+#  not in .structures
 
 
 # EngineEvTypes = _enum_engine_ev_types(
@@ -422,6 +419,10 @@ class GameTicker(Listener):
             injec.core.display_update()
 
             self._clock.tick(self._maxfps)
+
+
+# TODO:
+#  put this into a runners/helpers file, or smth
 
 
 # -  --  - - --
