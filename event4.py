@@ -24,7 +24,17 @@ import pygame
 
 FIRST_ENGIN_TYPE = pygame.USEREVENT
 
+# new ideas(nov 22)
+PseudoEnumSeed = lambda gt,c0: {i: ename for (i, ename) in zip(gt, range(c0,c0+len(gt)))}
 
+
+class PseudoEnum:
+    def __init__(self,seed):
+        self._s = seed
+    def __getattr__(self, name):
+        return self._s[name]
+
+      
 def camel_case_format(string_ac_underscores):
     words = [word.capitalize() for word in string_ac_underscores.split('_')]
     return "".join(words)
