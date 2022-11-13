@@ -20,108 +20,33 @@ from structures.Singleton import Singleton
 
 import pygame
 
-# pygame.USEREVENT
-
-FIRST_ENGIN_TYPE = pygame.USEREVENT
-
-# new ideas(nov 22)
-PseudoEnumSeed = lambda gt,c0: {i: ename for (i, ename) in zip(gt, range(c0,c0+len(gt)))}
+from ken_enum import PseudoEnum, underscore_format, camel_case_format
 
 
-class PseudoEnum:
-    def __init__(self,seed):
-        self._s = seed
-    def __getattr__(self, name):
-        return self._s[name]
+# _enum_engine_ev_types(
 
-      
-def camel_case_format(string_ac_underscores):
-    words = [word.capitalize() for word in string_ac_underscores.split('_')]
-    return "".join(words)
-
-
-def underscore_format(name):
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-
-# ------------ construction d'enums -----------
-def enum_builder_generic(to_upper, starting_index, *sequential, **named):
-    domaine = range(starting_index, len(sequential) + starting_index)
-    enums = dict(zip(sequential, domaine), **named)
-    tmp_inv_map = {v: k for k, v in enums.items()}
-    tmp_all_codes = domaine
-
-    if to_upper:
-        tmp = dict()
-        for k, v in enums.items():
-            if k == 'inv_map' or k == 'all_codes':
-                continue
-            tmp[k.upper()] = v
-        enums = tmp
-
-    enums['dict_repr'] = enums
-    enums['inv_map'] = tmp_inv_map
-    enums['all_codes'] = tmp_all_codes
-    enums['last_code'] = len(sequential) + starting_index - 1
-    enums['size'] = len(sequential)
-    return type('Enum', (), enums)
-
-
-def enum_from_n(n, *sequential, **named):
-    return enum_builder_generic(False, n, *sequential, **named)
-
-
-def enum(*sequential, **named):
-    """
-    the most used enum builder
-    """
-    return enum_from_n(0, *sequential, **named)
-# ----------------- constr enums done ------------------------------------
-
-
-def _enum_engine_ev_types(*sequential, **named):
-    return enum_builder_generic(False, FIRST_ENGIN_TYPE, *sequential, **named)
-
-
-EngineEvTypes = _enum_engine_ev_types(
+EngineEvTypes = PseudoEnum([
     'Update',
     'Paint',
-    # 'RefreshScreen',
 
-    'Gamestart',  # correspond à l'ancien InitializeEvent
-    'Gameover',  # indique que la sortie de jeu est certaine
-
-    # 'BtClick',
-    'ConvStart',  # contains convo_obj, portrait
+    'Gamestart',
+    'Gameover',
+    # (used in RPGs like niobepolis, conv<- conversation)
+    'ConvStart',  #  ontains convo_obj, portrait
     'ConvFinish',
-    'ConvStep',  # contains value (used in rpgs like niobepolis, conv means conversation)
+    'ConvStep',  # contains value
 
-    'StateChange',  # contient un code state_ident
-    'StatePush',  # contient un code state_ident
+    'StateChange',  # contains code state_ident
+    'StatePush',  # contains code state_ident
     'StatePop',
-
-    #'FocusCh',
-    #'FieldCh',
-    #'DoAuth',
 
     'NetwSend',  # [num] un N°identification & [msg] un string (Async network comms)
     'NetwReceive'  # [num] un N°identification & [msg] un string (Async network comms)
-)
-
-first_custo_type = FIRST_ENGIN_TYPE + EngineEvTypes.size
+], pygame.USEREVENT)
 
 
-def enum_ev_types(*sequential, **named):  # Custom events /!\ not engine events
-    global first_custo_type
-    # this function should be used by the custom game
-    return enum_builder_generic(False, first_custo_type, *sequential, **named)
-
-
-MyEvents = enum_ev_types(
-    'TestEvent',
-    'TestEventB'
-)
+def mk_enum_game_events(x_iterable):
+    return PseudoEnum(x_iterable, EngineEvTypes.first+EngineEvTypes.size)
 
 
 @Singleton
@@ -129,8 +54,9 @@ class EventManager:
     def __init__(self):
         self._etype_to_listenerli = dict()
         self._cbuffer = CircularBuffer()
-        self._known_ev_types = dict()  # corresp identifiant numérique <-> nom evenement
+        self._known_ev_types = dict()  # corresp nom evenement <-> identifiant numérique
         self.regexp = None
+        self.debug_mode = False
 
     def post(self, etype, **kwargs):
         self._cbuffer.enqueue((etype, kwargs))
@@ -154,24 +80,46 @@ class EventManager:
         regexp_prefix = '^on_(?:'
         rxp_body = '|'.join(gnames)
         regexp_sufix = '$)'
-        print(regexp_prefix + rxp_body + regexp_sufix)
+        # debug: print the updated regexp
+        # -
+        # print(regexp_prefix + rxp_body + regexp_sufix)
         self.regexp = re.compile(regexp_prefix + rxp_body + regexp_sufix)
 
-    def register(self, ename, listener_obj):
-        cod = EngineEvTypes.dict_repr[ename]
+    def subscribe(self, ename, listener_obj):
+        cod = self._known_ev_types[ename]
         if cod not in self._etype_to_listenerli:
             self._etype_to_listenerli[cod] = list()
+        
         self._etype_to_listenerli[cod].append(listener_obj)
+        if self.debug_mode:
+            print('  debug SUBSCRIBE - - - {} - {}'.format(ename, listener_obj))
 
-    def event_types_inform(self, given_ev_name_li=None):
+    def unsubscribe(self, ename, listener_obj):
+        cod = self._known_ev_types[ename]
+        # if cod in self._etype_to_listenerli:
+        try:
+            self._etype_to_listenerli[cod].remove(listener_obj)
+        except (KeyError, ValueError):
+            print('***EventManager warning. Trying to remove listener_obj {}, not found!'.format(
+                listener_obj.id
+            ))
+        if self.debug_mode:
+            print('  debug UNSUBSCRIBE - - - {} - {}'.format(ename, listener_obj))
+            
+
+    def event_types_inform(self, given_extra_penum=None):
         names = list()
-        for eid, evname in EngineEvTypes.inv_map.items():
+        self._known_ev_types = EngineEvTypes.content.copy()
+
+        for evname,eid in EngineEvTypes.content.items():
             names.append(underscore_format(evname))
 
-        if given_ev_name_li:
-            names.extend(given_ev_name_li)
+        if given_extra_penum:
+            self._known_ev_types.update(given_extra_penum.content)
+            for evname,eid in given_extra_penum.content.items():
+                    names.append(underscore_format(evname))
 
-        # force refresh regexp!
+        # force a {refresh regexp} op!
         self._refresh_regexp(names)
 
 
@@ -186,6 +134,11 @@ class KengiListenerObj:
 
         self._is_active = False
         self._inspection_res = set()
+        self._tracked_ev = list()
+
+    @property
+    def id(self):
+        return self._lid
 
     def turn_on(self):
         if self._ev_manager_ref is None:
@@ -196,19 +149,19 @@ class KengiListenerObj:
         every_method = [method_name for method_name in dir(self) if callable(getattr(self, method_name))]
         callbacks_only = [mname for mname in every_method if self._ev_manager_ref.regexp.match(mname)]
 
-        events_a_surveiller = list()
         for cbname in callbacks_only:
             # remove 'on_' prefix and convert Back to CamlCase
-            events_a_surveiller.append(camel_case_format(cbname[3:]))
-        print(events_a_surveiller)
+            self._tracked_ev.append(camel_case_format(cbname[3:]))
 
         # enregistrement de son activité d'écoute auprès du evt manager
-        for evname in events_a_surveiller:
-            self._ev_manager_ref.register(evname, self)
+        for evname in self._tracked_ev :
+            self._ev_manager_ref.subscribe(evname, self)
 
     def turn_off(self):
         # opération contraire
-        pass
+        for evname in self._tracked_ev:
+            self._ev_manager_ref.unsubscribe(evname, self)
+        del self._tracked_ev[:]
 
 
 class SampleListener(KengiListenerObj):
@@ -225,7 +178,7 @@ class SampleListener(KengiListenerObj):
     def on_paint(self, ev):
         print('m1 -', ev)
 
-    def on_lmao(self, ev):
+    def on_player_death(self, ev):
         print('m1 -', ev)
 
     def on_update(self, ev):
@@ -242,41 +195,50 @@ class SampleListener(KengiListenerObj):
 #  testing
 # ----------------
 if __name__ == '__main__':
+    MyEvents = mk_enum_game_events(['PlayerMovement', 'PlayerDeath'])
+
     manager = EventManager.instance()
-    manager.event_types_inform()
+    # manager.debug_mode = True
+    manager.event_types_inform(
+        MyEvents
+    )  # manager becomes self-aware of engine event types PLUS specific game ev.
 
+    # test: disp codes
+    print('~~ codes ~~')
+    print(EngineEvTypes.Update)
+    print(EngineEvTypes.Paint)
+    print('...')
+    print(EngineEvTypes.NetwReceive)
+    print('and the extra:')
+    print(MyEvents.PlayerMovement)
+    print(MyEvents.PlayerDeath)
+    print('-'*48)
+    
+    # test: post 5 events and updates the ev manager...
+    print('method .POST called x5')
     manager.post(17, serveur='api.gaudia-tech.com', machin='ouais')
-
     manager.post(3, jojo='trois', nom='tom')
     manager.post(551, hp='128', nom='roger')
     manager.post(17, hp='11', nom='jojo')
     manager.post(332, hp='59878', nom='poisson')
 
-    print(manager._cbuffer.size())
-
+    print('the NEW queue size=', manager._cbuffer.size())
     manager.update()
-    print(manager._cbuffer.size())
+    print('after .UPDATE call, the queue size=', manager._cbuffer.size())
+    print('-'*48)
 
-    print(EngineEvTypes.Update)
-    print(EngineEvTypes.Paint)
-    print(MyEvents.TestEvent)
-    print(MyEvents.TestEventB)
+    print('show me the regexp in EventManager inst?')
+    print(manager.regexp)
+    print('-'*48)
 
-    # liste_brute = [
-    #     '__init__',
-    #     'machin',
-    #     'on_paint',
-    #     'truc',
-    #     'on_update',
-    #     'set_thing',
-    #     'get_thing'
-    # ]
-    # liste_callbacks = [s for s in liste_brute if manager.regexp.match(s)]
-    # print(liste_callbacks)
-
-    print(EngineEvTypes.dict_repr)
-    print('??')
-    print('-'*33)
-    my_li = SampleListener('tom')
+    print("turn on/turn off the listener..")
+##    print(EngineEvTypes.content)
+##    print('??')
+##    print('-'*33)
+    my_li = SampleListener('thomas')
     my_li.turn_on()
-    print(my_li)
+    my_li.turn_off()
+##    print(my_li)
+
+    # ---sandbox testing---
+    enum_example = PseudoEnum(['KeyUp', 'KeyDown', 'Update' ])
